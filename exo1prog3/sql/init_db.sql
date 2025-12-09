@@ -1,4 +1,4 @@
--- À exécuter avec un superutilisateur PostgreSQL
+
 
 CREATE DATABASE product_management_db;
 

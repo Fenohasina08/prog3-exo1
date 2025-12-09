@@ -1,4 +1,4 @@
--- Création des tables pour product_management_db
+
 
 CREATE TABLE product (
     id SERIAL PRIMARY KEY,
