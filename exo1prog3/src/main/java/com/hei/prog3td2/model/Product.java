@@ -1,19 +1,18 @@
 package com.hei.prog3td2.model;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 
 public class Product {
     private int id;
     private String name;
-    private BigDecimal price;
     private Instant creationDatetime;
+    private Category category;
 
-    public Product(int id, String name, BigDecimal price, Instant creationDatetime) {
+    public Product(int id, String name, Instant creationDatetime, Category category) {
         this.id = id;
         this.name = name;
-        this.price = price;
         this.creationDatetime = creationDatetime;
+        this.category = category;
     }
 
     public int getId() {
@@ -32,14 +31,6 @@ public class Product {
         this.name = name;
     }
 
-    public BigDecimal getPrice() {
-        return price;
-    }
-
-    public void setPrice(BigDecimal price) {
-        this.price = price;
-    }
-
     public Instant getCreationDatetime() {
         return creationDatetime;
     }
@@ -48,13 +39,26 @@ public class Product {
         this.creationDatetime = creationDatetime;
     }
 
+    public Category getCategory() {
+        return category;
+    }
+
+    public void setCategory(Category category) {
+        this.category = category;
+    }
+
+
+    public String getCategoryName() {
+        return (category != null) ? category.getName() : null;
+    }
+
     @Override
     public String toString() {
         return "Product{" +
                 "id=" + id +
                 ", name='" + name + '\'' +
-                ", price=" + price +
                 ", creationDatetime=" + creationDatetime +
+                ", category=" + (category != null ? category.getName() : "null") +
                 '}';
     }
 }

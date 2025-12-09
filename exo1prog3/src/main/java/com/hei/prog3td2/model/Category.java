@@ -3,12 +3,10 @@ package com.hei.prog3td2.model;
 public class Category {
     private int id;
     private String name;
-    private int productId;
 
-    public Category(int id, String name, int productId) {
+    public Category(int id, String name) {
         this.id = id;
         this.name = name;
-        this.productId = productId;
     }
 
     public int getId() {
@@ -27,20 +25,11 @@ public class Category {
         this.name = name;
     }
 
-    public int getProductId() {
-        return productId;
-    }
-
-    public void setProductId(int productId) {
-        this.productId = productId;
-    }
-
     @Override
     public String toString() {
         return "Category{" +
                 "id=" + id +
                 ", name='" + name + '\'' +
-                ", productId=" + productId +
                 '}';
     }
 }

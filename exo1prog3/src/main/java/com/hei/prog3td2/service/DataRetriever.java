@@ -4,7 +4,6 @@ import com.hei.prog3td2.db.DBConnection;
 import com.hei.prog3td2.model.Category;
 import com.hei.prog3td2.model.Product;
 
-import java.math.BigDecimal;
 import java.sql.*;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -12,10 +11,9 @@ import java.util.List;
 
 public class DataRetriever {
 
-
     public List<Category> getAllCategories() {
         List<Category> categories = new ArrayList<>();
-        String sql = "SELECT * FROM product_category ORDER BY id";
+        String sql = "SELECT id, name FROM product_category ORDER BY id"; // Pas de DISTINCT
 
         try (Connection conn = DBConnection.getDBConnection();
              PreparedStatement stmt = conn.prepareStatement(sql);
@@ -24,8 +22,7 @@ public class DataRetriever {
             while (rs.next()) {
                 categories.add(new Category(
                         rs.getInt("id"),
-                        rs.getString("name"),
-                        rs.getInt("product_id")
+                        rs.getString("name")
                 ));
             }
 
@@ -35,11 +32,25 @@ public class DataRetriever {
         return categories;
     }
 
-
     public List<Product> getProductList(int page, int size) {
         List<Product> products = new ArrayList<>();
         int offset = (page - 1) * size;
-        String sql = "SELECT * FROM product ORDER BY id LIMIT ? OFFSET ?";
+
+        // ICI AUSSI : selon le PDF, on doit filtrer par catégorie si on veut être strict
+        // Mais getProductList n'a pas de paramètres de filtre, donc on garde la logique actuelle
+        String sql = """
+            SELECT p.*, 
+                   pc.id as cat_id, 
+                   pc.name as cat_name
+            FROM product p
+            LEFT JOIN product_category pc ON p.id = pc.product_id
+            WHERE pc.id = (
+                SELECT MIN(id) FROM product_category 
+                WHERE product_id = p.id
+            )
+            ORDER BY p.id
+            LIMIT ? OFFSET ?
+            """;
 
         try (Connection conn = DBConnection.getDBConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -49,7 +60,22 @@ public class DataRetriever {
 
             try (ResultSet rs = stmt.executeQuery()) {
                 while (rs.next()) {
-                    products.add(mapResultSetToProduct(rs));
+                    Category category = null;
+                    if (rs.getObject("cat_id") != null) {
+                        category = new Category(
+                                rs.getInt("cat_id"),
+                                rs.getString("cat_name")
+                        );
+                    }
+
+                    Product product = new Product(
+                            rs.getInt("id"),
+                            rs.getString("name"),
+                            rs.getTimestamp("creation_datetime").toInstant(),
+                            category
+                    );
+
+                    products.add(product);
                 }
             }
 
@@ -59,29 +85,59 @@ public class DataRetriever {
         return products;
     }
 
-
-    public List<Product> getProductsByCriteria(String productName, String categoryName,
-                                               Instant creationMin, Instant creationMax) {
+    public List<Product> getProductsByCriteria(
+            String productName, String categoryName,
+            Instant creationMin, Instant creationMax
+    ) {
         List<Product> products = new ArrayList<>();
+
+        // Requête principale
         StringBuilder sql = new StringBuilder("""
-                SELECT DISTINCT p.*
-                FROM product p
-                LEFT JOIN product_category c ON p.id = c.product_id
-                WHERE 1=1
-                """);
+        SELECT p.*, 
+               pc.id as cat_id, 
+               pc.name as cat_name
+        FROM product p
+        LEFT JOIN product_category pc ON p.id = pc.product_id
+        WHERE pc.id = (
+            SELECT MIN(id) FROM product_category 
+            WHERE product_id = p.id
+        )
+        """);
 
         List<Object> params = new ArrayList<>();
 
+        // FILTRE STRICT selon PDF : productName doit aussi vérifier une catégorie
         if (productName != null && !productName.isBlank()) {
             sql.append(" AND p.name ILIKE ?");
+            sql.append(" AND EXISTS (");
+            sql.append("   SELECT 1 FROM product_category pc2");
+            sql.append("   WHERE pc2.product_id = p.id");
+            sql.append("   AND pc2.name ILIKE ?");
+            sql.append(" )");
             params.add("%" + productName + "%");
+            // Pour quel nom de catégorie ? Le PDF ne dit pas...
+            // On met le même que categoryName si fourni, sinon on met "%" pour "n'importe quelle catégorie"
+            if (categoryName != null && !categoryName.isBlank()) {
+                params.add("%" + categoryName + "%");
+            } else {
+                params.add("%"); // Accepte n'importe quelle catégorie
+            }
         }
 
+        // FILTRE categoryName
         if (categoryName != null && !categoryName.isBlank()) {
-            sql.append(" AND c.name ILIKE ?");
-            params.add("%" + categoryName + "%");
+            // On ne l'ajoute que si productName n'a pas déjà ajouté la condition
+            if (productName == null || productName.isBlank()) {
+                sql.append(" AND EXISTS (");
+                sql.append("   SELECT 1 FROM product_category pc2");
+                sql.append("   WHERE pc2.product_id = p.id");
+                sql.append("   AND pc2.name ILIKE ?");
+                sql.append(" )");
+                params.add("%" + categoryName + "%");
+            }
         }
 
+        // Gestion des dates (inchangé)
         if (creationMin != null) {
             sql.append(" AND p.creation_datetime >= ?");
             params.add(Timestamp.from(creationMin));
@@ -103,38 +159,79 @@ public class DataRetriever {
 
             try (ResultSet rs = stmt.executeQuery()) {
                 while (rs.next()) {
-                    products.add(mapResultSetToProduct(rs));
+                    Category category = null;
+                    if (rs.getObject("cat_id") != null) {
+                        category = new Category(
+                                rs.getInt("cat_id"),
+                                rs.getString("cat_name")
+                        );
+                    }
+
+                    Product product = new Product(
+                            rs.getInt("id"),
+                            rs.getString("name"),
+                            rs.getTimestamp("creation_datetime").toInstant(),
+                            category
+                    );
+
+                    products.add(product);
                 }
             }
 
         } catch (SQLException e) {
             e.printStackTrace();
         }
+
         return products;
     }
 
-
-    public List<Product> getProductsByCriteria(String productName, String categoryName,
-                                               Instant creationMin, Instant creationMax,
-                                               int page, int size) {
+    public List<Product> getProductsByCriteria(
+            String productName, String categoryName,
+            Instant creationMin, Instant creationMax,
+            int page, int size
+    ) {
         List<Product> products = new ArrayList<>();
+        int offset = (page - 1) * size;
+
         StringBuilder sql = new StringBuilder("""
-                SELECT DISTINCT p.*
-                FROM product p
-                LEFT JOIN product_category c ON p.id = c.product_id
-                WHERE 1=1
-                """);
+        SELECT p.*, 
+               pc.id as cat_id, 
+               pc.name as cat_name
+        FROM product p
+        LEFT JOIN product_category pc ON p.id = pc.product_id
+        WHERE pc.id = (
+            SELECT MIN(id) FROM product_category 
+            WHERE product_id = p.id
+        )
+        """);
 
         List<Object> params = new ArrayList<>();
 
+        // MÊME LOGIQUE que la méthode sans pagination
         if (productName != null && !productName.isBlank()) {
             sql.append(" AND p.name ILIKE ?");
+            sql.append(" AND EXISTS (");
+            sql.append("   SELECT 1 FROM product_category pc2");
+            sql.append("   WHERE pc2.product_id = p.id");
+            sql.append("   AND pc2.name ILIKE ?");
+            sql.append(" )");
             params.add("%" + productName + "%");
+            if (categoryName != null && !categoryName.isBlank()) {
+                params.add("%" + categoryName + "%");
+            } else {
+                params.add("%");
+            }
         }
 
         if (categoryName != null && !categoryName.isBlank()) {
-            sql.append(" AND c.name ILIKE ?");
-            params.add("%" + categoryName + "%");
+            if (productName == null || productName.isBlank()) {
+                sql.append(" AND EXISTS (");
+                sql.append("   SELECT 1 FROM product_category pc2");
+                sql.append("   WHERE pc2.product_id = p.id");
+                sql.append("   AND pc2.name ILIKE ?");
+                sql.append(" )");
+                params.add("%" + categoryName + "%");
+            }
         }
 
         if (creationMin != null) {
@@ -148,7 +245,6 @@ public class DataRetriever {
         }
 
         sql.append(" ORDER BY p.id LIMIT ? OFFSET ?");
-        int offset = (page - 1) * size;
         params.add(size);
         params.add(offset);
 
@@ -161,23 +257,29 @@ public class DataRetriever {
 
             try (ResultSet rs = stmt.executeQuery()) {
                 while (rs.next()) {
-                    products.add(mapResultSetToProduct(rs));
+                    Category category = null;
+                    if (rs.getObject("cat_id") != null) {
+                        category = new Category(
+                                rs.getInt("cat_id"),
+                                rs.getString("cat_name")
+                        );
+                    }
+
+                    Product product = new Product(
+                            rs.getInt("id"),
+                            rs.getString("name"),
+                            rs.getTimestamp("creation_datetime").toInstant(),
+                            category
+                    );
+
+                    products.add(product);
                 }
             }
 
         } catch (SQLException e) {
             e.printStackTrace();
         }
+
         return products;
-    }
-
-
-    private Product mapResultSetToProduct(ResultSet rs) throws SQLException {
-        return new Product(
-                rs.getInt("id"),
-                rs.getString("name"),
-                rs.getBigDecimal("price"),
-                rs.getTimestamp("creation_datetime").toInstant()
-        );
     }
 }
