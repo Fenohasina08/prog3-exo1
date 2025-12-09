@@ -13,7 +13,7 @@ public class DataRetriever {
 
     public List<Category> getAllCategories() {
         List<Category> categories = new ArrayList<>();
-        String sql = "SELECT id, name FROM product_category ORDER BY id"; // Pas de DISTINCT
+        String sql = "SELECT id, name FROM product_category ORDER BY id";
 
         try (Connection conn = DBConnection.getDBConnection();
              PreparedStatement stmt = conn.prepareStatement(sql);
