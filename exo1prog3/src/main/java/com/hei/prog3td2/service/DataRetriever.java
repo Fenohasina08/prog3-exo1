@@ -36,8 +36,7 @@ public class DataRetriever {
         List<Product> products = new ArrayList<>();
         int offset = (page - 1) * size;
 
-        // ICI AUSSI : selon le PDF, on doit filtrer par catégorie si on veut être strict
-        // Mais getProductList n'a pas de paramètres de filtre, donc on garde la logique actuelle
+
         String sql = """
             SELECT p.*, 
                    pc.id as cat_id, 
@@ -91,7 +90,7 @@ public class DataRetriever {
     ) {
         List<Product> products = new ArrayList<>();
 
-        // Requête principale
+
         StringBuilder sql = new StringBuilder("""
         SELECT p.*, 
                pc.id as cat_id, 
@@ -106,7 +105,6 @@ public class DataRetriever {
 
         List<Object> params = new ArrayList<>();
 
-        // FILTRE STRICT selon PDF : productName doit aussi vérifier une catégorie
         if (productName != null && !productName.isBlank()) {
             sql.append(" AND p.name ILIKE ?");
             sql.append(" AND EXISTS (");
@@ -115,18 +113,17 @@ public class DataRetriever {
             sql.append("   AND pc2.name ILIKE ?");
             sql.append(" )");
             params.add("%" + productName + "%");
-            // Pour quel nom de catégorie ? Le PDF ne dit pas...
-            // On met le même que categoryName si fourni, sinon on met "%" pour "n'importe quelle catégorie"
+
             if (categoryName != null && !categoryName.isBlank()) {
                 params.add("%" + categoryName + "%");
             } else {
-                params.add("%"); // Accepte n'importe quelle catégorie
+                params.add("%");
             }
         }
 
-        // FILTRE categoryName
+
         if (categoryName != null && !categoryName.isBlank()) {
-            // On ne l'ajoute que si productName n'a pas déjà ajouté la condition
+
             if (productName == null || productName.isBlank()) {
                 sql.append(" AND EXISTS (");
                 sql.append("   SELECT 1 FROM product_category pc2");
@@ -137,7 +134,7 @@ public class DataRetriever {
             }
         }
 
-        // Gestion des dates (inchangé)
+
         if (creationMin != null) {
             sql.append(" AND p.creation_datetime >= ?");
             params.add(Timestamp.from(creationMin));
@@ -207,7 +204,6 @@ public class DataRetriever {
 
         List<Object> params = new ArrayList<>();
 
-        // MÊME LOGIQUE que la méthode sans pagination
         if (productName != null && !productName.isBlank()) {
             sql.append(" AND p.name ILIKE ?");
             sql.append(" AND EXISTS (");
